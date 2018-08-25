@@ -37,24 +37,28 @@ extern "C"
 
 #define MAX_STREAMS 20
 
+//音视频数据包定义,在瘦身后的ffplay中,每一个包是一个完整的数据帧.
+//注意:保存音视频数据包的内存是malloc出的,用完后应及时free
 typedef struct AVPacket
 {
-    int64_t pts; // presentation time stamp in time_base units
-    int64_t dts; // decompression time stamp in time_base units
-    int64_t pos; // byte position in stream, -1 if unknown
-    uint8_t *data;
-    int size;
-    int stream_index;
-    int flags;
+    int64_t pts;	//表示时间,对视频是显示时间 // presentation time stamp in time_base units
+    int64_t dts;	//解码时间,这个不是很重要 // decompression time stamp in time_base units
+    int64_t pos;	// byte position in stream, -1 if unknown
+    uint8_t *data;	//实际保存音视频数据缓存的首地址
+    int size;		//实际保存音视频数据缓存的大小
+    int stream_index;	//当前音视频数据包对应的流索引,在本例中用于区分音频还是视频
+    int flags;		//数据包的一些标记,比如是否是关键帧等
     void(*destruct)(struct AVPacket*);
 } AVPacket;
 
+//音视频数据包链表节点定义,注意:每一个AVPacketList仅含有一个AVPacket,
 typedef struct AVPacketList
 {
     AVPacket pkt;
     struct AVPacketList *next;
 } AVPacketList;
 
+//释放掉音视频数据包占用的内存,把首地址置空是一个很好的习惯
 static inline void av_destruct_packet(AVPacket *pkt)
 {
     av_free(pkt->data);
@@ -62,12 +66,15 @@ static inline void av_destruct_packet(AVPacket *pkt)
     pkt->size = 0;
 }
 
+//判断一下指针,中转一下,释放掉音视频数据包占用的内存
 static inline void av_free_packet(AVPacket *pkt)
 {
     if (pkt && pkt->destruct)
         pkt->destruct(pkt);
 }
 
+//读文件往数据包中填数据,注意:程序运行到这里时,文件偏移量已确定,要读数据的大小也确定,
+//但是数据包的缓存没有分配.分配好内存后,要初始化包的一些变量
 static inline int av_get_packet(ByteIOContext *s, AVPacket *pkt, int size)
 {
     int ret;
@@ -75,12 +82,15 @@ static inline int av_get_packet(ByteIOContext *s, AVPacket *pkt, int size)
     if ((unsigned)size > (unsigned)size + FF_INPUT_BUFFER_PADDING_SIZE)
         return AVERROR_NOMEM;
 
+	//分配数据包缓存
     data = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!data)
         return AVERROR_NOMEM;
 
+	//缓存清0
     memset(data + size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
 
+	//设置AVPacket其他成员变量,能确定的赋确定值,不能确定的赋初值
     pkt->pts = AV_NOPTS_VALUE;
     pkt->dts = AV_NOPTS_VALUE;
     pkt->pos =  - 1;
@@ -92,6 +102,7 @@ static inline int av_get_packet(ByteIOContext *s, AVPacket *pkt, int size)
 
     pkt->pos = url_ftell(s);
 
+	//实际读广义文件填充数据包,读取文件错误时通常是到了末尾,
     ret = url_fread(s, pkt->data, size);
     if (ret <= 0)
         av_free_packet(pkt);
@@ -101,6 +112,8 @@ static inline int av_get_packet(ByteIOContext *s, AVPacket *pkt, int size)
     return ret;
 }
 
+//为识别文件格式,要读一部分文件头数据来分析匹配ffplay支持的文件格式文件特征,
+//于是,AVProbeData结构定义了文件名,首地址和大小.此处的读独立于其他文件操作
 typedef struct AVProbeData
 {
     const char *filename;
@@ -108,6 +121,7 @@ typedef struct AVProbeData
     int buf_size;
 } AVProbeData;
 
+//文件索引结构
 typedef struct AVIndexEntry
 {
     int64_t pos;
@@ -116,33 +130,37 @@ typedef struct AVIndexEntry
     int size: 30; //yeah trying to keep the size of this small to reduce memory requirements (its 24 vs 32 byte due to possible 8byte align)
 } AVIndexEntry;
 
+//抽象的表示一个媒体流,定义了所有媒体一些通用的属性
 typedef struct AVStream
 {
-    AVCodecContext *actx;  // codec context, change from AVCodecContext *codec;
+    AVCodecContext *actx;	//关联到的解码器 // codec context, change from AVCodecContext *codec;
 
-    void *priv_data;       // AVIStream
+    void *priv_data;		// 在示例中,关联到AVIStream
 
-    AVRational time_base; // 由 av_set_pts_info()函数初始化
+    AVRational time_base;	// 由 av_set_pts_info()函数初始化
 
     AVIndexEntry *index_entries; // only used if the format does not support seeking natively
     int nb_index_entries;
     int index_entries_allocated_size;
 
-    double frame_last_delay;
+    double frame_last_delay;	//帧最后延迟
 } AVStream;
 
+//AVFormatParameters结构在瘦身后的ffplay中没有实际意义,
 typedef struct AVFormatParameters
 {
     int dbg; //only for debug
 } AVFormatParameters;
 
+//AVInputFormat定义输入文件容器格式,着重与功能函数,一种文件容器格式对应一个AVInputFormat结构
+//在程序运行时有多个实例,但瘦身后ffplay仅一个实例
 typedef struct AVInputFormat
 {
-    const char *name;
+    const char *name;		//文件容器格式名,用于人性化阅读,维护代码
 
-    int priv_data_size;
+    int priv_data_size;		//程序运行时,文件容器格式对应的上下文结构大小,便于内存分配
 
-    int(*read_probe)(AVProbeData*);
+    int(*read_probe)(AVProbeData*);	//功能函数
 
     int(*read_header)(struct AVFormatContext *, AVFormatParameters *ap);
 
@@ -150,23 +168,25 @@ typedef struct AVInputFormat
 
     int(*read_close)(struct AVFormatContext*);
 
-    const char *extensions;     // 文件扩展名
+    const char *extensions;     // 文件容器格式对应的文件扩展名,识别文件格式的最后办法
 
-    struct AVInputFormat *next;
+    struct AVInputFormat *next;	
 
 } AVInputFormat;
 
+//AVFormatContext结构表示程序运行的当前文件容器格式使用的上下文,着重于
+//所有文件容器共有的属性,程序运行后仅一个实例
 typedef struct AVFormatContext  // format I/O context
 {
-    struct AVInputFormat *iformat;
+    struct AVInputFormat *iformat;		//关联程序运行时,实际的文件容器格式指针
 
-    void *priv_data;
+    void *priv_data;		//关联具体文件容器格式上下文的指针,在本例中是AVIContext
 
-    ByteIOContext pb;
+    ByteIOContext pb;		//关联广义输入文件
 
-    int nb_streams;
+    int nb_streams;			//广义输入文件中媒体流计数
 
-    AVStream *streams[MAX_STREAMS];
+    AVStream *streams[MAX_STREAMS];	//关联广义输入文件中的媒体流
 
 } AVFormatContext;
 

@@ -20,6 +20,7 @@ extern "C"
 
 #define LIBAVUTIL_IDENT         "Lavu" AV_STRINGIFY(LIBAVUTIL_VERSION)
 
+//像素格式的宏定义
 enum PixelFormat
 {
     PIX_FMT_NONE =  - 1,
