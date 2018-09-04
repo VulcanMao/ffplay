@@ -457,19 +457,24 @@ int avi_read_packet(AVFormatContext *s, AVPacket *pkt)
             AVIStream *ast = st->priv_data;
             int64_t ts = ast->frame_offset;
 
+			//把帧偏移换算成帧数
             if (ast->sample_size)
                 ts /= ast->sample_size;
 
-            ts = av_rescale(ts, AV_TIME_BASE *(int64_t)st->time_base.num, st->time_base.den);
+			//把帧数换算成pts表示时间
+			ts = av_rescale(ts, AV_TIME_BASE *(int64_t)st->time_base.num, st->time_base.den);
 
-            if (ts < best_ts)
+			//取最小的时间点对应的时间,流指针,流索引作为要读的最佳(读取)流参数
+            if (ts < best_ts)	//每次读取时间点(ast->frame_offset)最近的包
             {
                 best_ts = ts;
                 best_st = st;
                 best_stream_index = i;
             }
         }
+		//保存最佳流对应的AVIStream,便于后面赋值并传递参数packet_size和remaining
         best_ast = best_st->priv_data;
+		//换算最小的时间点,查找索引表取出对应的索引.在缓存足够大,一次性完整读取帧数据时,此时best_ast->remaining参数为0
         best_ts = av_rescale(best_ts, best_st->time_base.den, AV_TIME_BASE *(int64_t)best_st->time_base.num);
         if (best_ast->remaining)
             i = av_index_search_timestamp(best_st, best_ts, AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
@@ -478,6 +483,8 @@ int avi_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         if (i >= 0)     
         {
+			//找到最佳索引,取出其他参数,seek到相应位置,保存最佳流索引,保存
+			//并传递要读取的数据大小(通过最佳流索引找到最佳流,再找到对应AVIStream结构,再找到数据大小)
             int64_t pos = best_st->index_entries[i].pos;
             pos += best_ast->packet_size - best_ast->remaining;
             url_fseek(&s->pb, pos + 8, SEEK_SET);
@@ -494,6 +501,7 @@ resync:
 
     if (avi->stream_index_2 >= 0)
     {
+		//如果找到最佳流索引,以此为根参数,取出其他参数和读取媒体数据
         AVStream *st = s->streams[avi->stream_index_2];
         AVIStream *ast = st->priv_data;
         int size;
@@ -508,8 +516,10 @@ resync:
         if (size > ast->remaining)
             size = ast->remaining;
 
+		//读取媒体数据到pkt包中
         av_get_packet(pb, pkt, size);
 
+		//修改媒体流的一些其他参数
         pkt->dts = ast->frame_offset;
 
         if (ast->sample_size)
@@ -517,6 +527,7 @@ resync:
 
         pkt->stream_index = avi->stream_index_2;
 
+		//在简单清理顺序播放时,本if结构没有什么实际意义
         if (st->actx->codec_type == CODEC_TYPE_VIDEO)
         {
             if (st->index_entries)
@@ -535,6 +546,7 @@ resync:
             }
             else
             {
+				//如果没有索引,较好的办法是把所有帧都设为关键帧
                 pkt->flags |= PKT_FLAG_KEY; // if no index, better to say that all frames are key frames
             }
         }
@@ -543,6 +555,7 @@ resync:
             pkt->flags |= PKT_FLAG_KEY;
         }
 
+		//修改帧偏移
         if (ast->sample_size)
             ast->frame_offset += pkt->size;
         else
@@ -551,6 +564,7 @@ resync:
         ast->remaining -= size;
         if (!ast->remaining)
         {
+			//缓存足够大时,程序一定运行到这里,复位标志性参数
             avi->stream_index_2 =  - 1;
             ast->packet_size = 0;
             if (size &1)
@@ -560,20 +574,27 @@ resync:
             }
         }
 
+		//返回实际读到的数据大小
         return size;
     }
 
+	//把数组d[8]清空为-1,为了下面的流标记查找时不会出错
     memset(d,  - 1, sizeof(int) *8);
     for (i = sync = url_ftell(pb); !url_feof(pb); i++)
     {
+		//交织avi时顺序读取文件,媒体数据
         int j;
 
         if (i >= avi->movi_end)
             break;
-
+		
+		//首先找到流标记,比如00db,00dc,01wb等. 在32bit CPU上为存取数据方便,把
+		//avi中的帧标记和帧大小共8字节对应赋值到int型数组d[8]中,这样没错都是整数操作
+		//把整型缓存前移一个单位
         for (j = 0; j < 7; j++)
             d[j] = d[j + 1];
 
+		//从文件中读一个字节补充到整型缓存,计算包大小和流索引
         d[7] = get_byte(pb);
 
         size = d[4] + (d[5] << 8) + (d[6] << 16) + (d[7] << 24);
@@ -587,9 +608,12 @@ resync:
             n = 100; //invalid stream id
         }
 
+		//校验size大小,如果偏移位置加size超过数据块大小就不是有效的流标记
+		//校验流索引,如果<0就不是有效的流标记,流索引从0开始计数,媒体文件通常不超过10个流
         if (i + size > avi->movi_end || d[0] < 0)
             continue;
 
+		//处理诸如junk等需要跳过的块
         if ((d[0] == 'i' && d[1] == 'x' && n < s->nb_streams) 
          || (d[0] == 'J' && d[1] == 'U' && d[2] == 'N' && d[3] == 'K'))
         {
@@ -597,6 +621,7 @@ resync:
             goto resync;
         }
 
+		//计算流索引号n
         if (d[0] >= '0' && d[0] <= '9' && d[1] >= '0' && d[1] <= '9')
         {
             n = (d[0] - '0') *10+(d[1] - '0');
