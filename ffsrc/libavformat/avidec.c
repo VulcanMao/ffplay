@@ -634,6 +634,7 @@ resync:
         //parse ##dc/##wb
         if (n < s->nb_streams)
         {
+			//如果流索引号n比流总数小,认为有效.(我个人认为这个校验不太严格)
             AVStream *st;
             AVIStream *ast;
             st = s->streams[n];
@@ -651,6 +652,12 @@ resync:
             if (((ast->prefix_count < 5 || sync + 9 > i) && d[2] < 128 && d[3] < 128)
             	   || d[2] * 256 + d[3] == ast->prefix)
             {
+				/* 
+				if(d[2]*256+d[3]==ast->prefix)为真表示"db","dc","wb"等字串匹配,找到正确帧标记.
+				判断d[2]<128 && d[3]<128 是因为'd','b','c','w'等字符的ascii码小于128.
+				判断ast->prefix_count<5 || sync+9>i,是判断单一媒体的5帧内或者帧标记超过9个字节.
+				下边是单一媒体帧边界初次识别成功和以后识别成功的简单处理,计数自增后保存标记
+				*/
                 if (d[2] * 256 + d[3] == ast->prefix)
                     ast->prefix_count++;
                 else
@@ -658,7 +665,7 @@ resync:
                     ast->prefix = d[2] *256+d[3];
                     ast->prefix_count = 0;
                 }
-
+				//找到相应的流索引后,保存相关参数,跳转到实质性读媒体程序
                 avi->stream_index_2 = n;
                 ast->packet_size = size + 8;
                 ast->remaining = size;
@@ -669,6 +676,7 @@ resync:
         if (d[0] >= '0' && d[0] <= '9' && d[1] >= '0' && d[1] <= '9'
         && (d[2] == 'p' && d[3] == 'c') && n < s->nb_streams && i + size <= avi->movi_end)
         {
+			//处理调色板改变块数据,读取调色板数据到编解码器上下文的调色板数组中
             AVStream *st;
             int first, clr, flags, k, p;
 
@@ -697,6 +705,7 @@ resync:
     return  - 1;
 }
 
+//实际读取avi文件的索引
 static int avi_read_idx1(AVFormatContext *s, int size)
 {
     AVIContext *avi = s->priv_data;
@@ -708,9 +717,11 @@ static int avi_read_idx1(AVFormatContext *s, int size)
     unsigned last_pos =  - 1;
 
     nb_index_entries = size / 16;
+	//如果没有索引块chunk,直接返回
     if (nb_index_entries <= 0)
         return  - 1;
 
+	//遍历整个索引项
     for (i = 0; i < nb_index_entries; i++)// read the entries and sort them in each stream component
     {
         tag = get_le32(pb);
@@ -718,11 +729,17 @@ static int avi_read_idx1(AVFormatContext *s, int size)
         pos = get_le32(pb);
         len = get_le32(pb);
 
+		/*
+		如果第一个索引指示的偏移量大于数据块的偏移量,则索引指示的偏移量是相对文件开始字节的偏移量
+		索引加载到内存后,如果是相对数据块的偏移量就要换算层相对于文件开始字节的偏移量,便于seek操作.
+		下面统一处理这两种情况.
+		*/
         if (i == 0 && pos > avi->movi_list)
             avi->movi_list = 0;
 
         pos += avi->movi_list;
 
+		//计算流ID,如果索引块中的00dc,01wb等关键字表示的流id分别为数字0和1
         index = ((tag &0xff) - '0') *10; 
         index += ((tag >> 8) &0xff) - '0';
         if (index >= s->nb_streams)
@@ -745,6 +762,9 @@ static int avi_read_idx1(AVFormatContext *s, int size)
     return 0;
 }
 
+/*
+判断是否是非交织存放媒体数据,其中ni是non_interleaved的缩写,非交织的意思是
+*/
 static int guess_ni_flag(AVFormatContext *s)
 {
     int i;
