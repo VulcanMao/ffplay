@@ -763,7 +763,10 @@ static int avi_read_idx1(AVFormatContext *s, int size)
 }
 
 /*
-判断是否是非交织存放媒体数据,其中ni是non_interleaved的缩写,非交织的意思是
+判断是否是非交织存放媒体数据,其中ni是non_interleaved的缩写,非交织的意思.如果是
+非交织存放返回1,交织存放返回0.
+非交织存放的avi文件,如果有多个媒体流,肯定有某个流的开始字节文件偏移量大于其他某个流的
+末尾字节的文件偏移量.程序利用这个来判断是否是非交织存放,否则认为是交织存放.
 */
 static int guess_ni_flag(AVFormatContext *s)
 {
@@ -771,23 +774,30 @@ static int guess_ni_flag(AVFormatContext *s)
     int64_t last_start = 0;
     int64_t first_end = INT64_MAX;
 
+	//遍历avi文件中所有的索引,取流开始偏移量的最大值和末尾偏移量的最小值判断
     for (i = 0; i < s->nb_streams; i++)
     {
         AVStream *st = s->streams[i];
         int n = st->nb_index_entries;
 
+		//如果某个流没有index项,认为这个流没有数据,这个流忽略不计
         if (n <= 0)
             continue;
 
+		//遍历avi文件中所有的索引,取流开始偏移量的最大值
         if (st->index_entries[0].pos > last_start)
             last_start = st->index_entries[0].pos;
 
+		//遍历avi文件中所有的索引,取流末尾偏移量的最小值
         if (st->index_entries[n - 1].pos < first_end)
             first_end = st->index_entries[n - 1].pos;
     }
+	//如果某个流的开始最大值大于某个流的末尾最小值,认为是非交织存储,否则是交织存储
     return last_start > first_end;
 }
 
+//加载avi文件索引块chunk,特别注意在avi_read_idx1()函数调用的av_add_index_entry()函数
+//是分媒体类型按照时间顺序重新排序的.
 static int avi_load_index(AVFormatContext *s)
 {
     AVIContext *avi = s->priv_data;
@@ -824,6 +834,7 @@ the_end:
     return 0;
 }
 
+//关闭avi文件,释放内存和其他相关资源
 static int avi_read_close(AVFormatContext *s)
 {
     int i;
@@ -841,6 +852,7 @@ static int avi_read_close(AVFormatContext *s)
     return 0;
 }
 
+//avi文件判断,取avi文件的关键字串"RIFF"和"AVI"判断,和get_riff()函数部分相同
 static int avi_probe(AVProbeData *p)
 {
     if (p->buf_size <= 32) // check file header
@@ -852,6 +864,7 @@ static int avi_probe(AVProbeData *p)
         return 0;
 }
 
+//初始化avi文件格式AVInputFormat结构,直接赋值操作
 AVInputFormat avi_iformat =
 {
     "avi", 
@@ -862,6 +875,7 @@ AVInputFormat avi_iformat =
     avi_read_close,
 };
 
+//注册avi文件格式,ffplay把所有支持的文件格式用链表串联起来,表头是first_iformat,便于查找
 int avidec_init(void)
 {
     av_register_input_format(&avi_iformat);
