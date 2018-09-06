@@ -1,5 +1,9 @@
 #include "avformat.h"
 
+//和rtsp://等协议相对应,播放本地文件时应加file:前缀.
+//strstart功能是在str字符串中搜索val字符串只是的头,去掉头后用*ptr返回.
+//播放本地文件时,在命令行输入时可能会在文件路径名前加前缀"file:",
+//为调用系统的open函数,需要把这几个前导字符去掉,仅仅传入完整有效的文件路径名
 int strstart(const char *str, const char *val, const char **ptr)
 {
     const char *p,  *q;
@@ -16,7 +20,7 @@ int strstart(const char *str, const char *val, const char **ptr)
         *ptr = p;
     return 1;
 }
-
+//字符串拷贝函数,拷贝的字符数有buf_size指定,更安全的字符串拷贝操作
 void pstrcpy(char *buf, int buf_size, const char *str)
 {
     int c;

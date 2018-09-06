@@ -1,3 +1,4 @@
+//文件读写模块定义的数据结构和函数说明,ffplay把这些全部放到这个.h文件中
 #ifndef AVIO_H
 #define AVIO_H
 
@@ -5,22 +6,27 @@
 
 typedef int64_t offset_t;
 
+//简单的文件存取宏定义
 #define URL_RDONLY 0
 #define URL_WRONLY 1
 #define URL_RDWR   2
 
+//URLContext结构表示程序运行的当前广义文件协议使用的上下文,
+//着重于所有广义文件协议共有的属性(并且是在程序运行时才能确定其值)和关联其他结构的字段
 typedef struct URLContext
 {
-    struct URLProtocol *prot;
+    struct URLProtocol *prot;   //关联相应的广义输入文件协议
     int flags;
-    int max_packet_size; // if non zero, the stream is packetized with this max packet size
-    void *priv_data;
-    char filename[1]; // specified filename
+    int max_packet_size;        // if non zero, the stream is packetized with this max packet size
+    void *priv_data;            //在本例中,关联一个文件句柄
+    char filename[1];           //在本例中,存取本地文件名,filename仅指示本地文件名首地址
 } URLContext;
 
+//URLProtocol定义广义的文件协议,着重于功能函数,,
+//一种广义的文件协议对应一个URLProtocol结构,本例删掉了pipe,udp,tcp等输入协议,仅保留一个file协议
 typedef struct URLProtocol
 {
-    const char *name;
+    const char *name;   //协议文件名,便于人性化阅读理解
     int(*url_open)(URLContext *h, const char *filename, int flags);
     int(*url_read)(URLContext *h, unsigned char *buf, int size);
     int(*url_write)(URLContext *h, unsigned char *buf, int size);
@@ -29,12 +35,14 @@ typedef struct URLProtocol
     struct URLProtocol *next;
 } URLProtocol;
 
+//ByteIOContext结构扩展URLProtecol结构成内部有缓冲机制的广泛意义上的文件,
+//改善广义输入文件的IO性能
 typedef struct ByteIOContext
 {
-    unsigned char *buffer;
-    int buffer_size;
-    unsigned char *buf_ptr,  *buf_end;
-    void *opaque;
+    unsigned char *buffer;      //缓存首地址
+    int buffer_size;            //缓存大小
+    unsigned char *buf_ptr,  *buf_end;  //缓存读指针和末指针
+    void *opaque;               //指向URLContext结构的指针,便于跳转
     int (*read_buf)(void *opaque, uint8_t *buf, int buf_size);
     int (*write_buf)(void *opaque, uint8_t *buf, int buf_size);
     offset_t(*seek)(void *opaque, offset_t offset, int whence);
@@ -42,7 +50,7 @@ typedef struct ByteIOContext
     int must_flush;  // true if the next seek should flush
     int eof_reached; // true if eof reached
     int write_flag;  // true if open for writing
-    int max_packet_size;
+    int max_packet_size;        //如果非0,表示最大数据帧大小,用于分配足够的缓存
     int error;       // contains the error code or 0 if no error happened
 } ByteIOContext;
 
