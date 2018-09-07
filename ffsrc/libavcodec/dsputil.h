@@ -1,3 +1,4 @@
+//定义dsp优化限幅运算使用的查找表及其初始化函数
 #ifndef DSPUTIL_H
 #define DSPUTIL_H
 

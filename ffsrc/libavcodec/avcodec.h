@@ -1,3 +1,4 @@
+//定义编解码器库使用的宏,数据结构和函数,通常这些宏,数据结构和函数在此模块中相对全局有效
 #ifndef AVCODEC_H
 #define AVCODEC_H
 
@@ -8,6 +9,7 @@ extern "C"
 
 #include "../libavutil/avutil.h"
 
+	//和版本信息有关的几个宏定义
 #define FFMPEG_VERSION_INT      0x000409
 #define FFMPEG_VERSION          "CVS"
 
@@ -23,6 +25,7 @@ extern "C"
 #define AV_NOPTS_VALUE          int64_t_C(0x8000000000000000)
 #define AV_TIME_BASE            1000000
 
+//CodecID宏定义,瘦身后的ffplay只支持这两种codec,其他的都删掉了
 enum CodecID
 {
     CODEC_ID_TRUESPEECH,
@@ -30,6 +33,7 @@ enum CodecID
 	CODEC_ID_NONE
 };
 
+//Codec类型定义,瘦身后的ffplay只支持视频和音频
 enum CodecType
 {
     CODEC_TYPE_UNKNOWN =  - 1,
@@ -42,6 +46,8 @@ enum CodecType
 
 #define FF_INPUT_BUFFER_PADDING_SIZE 8
 
+//AVPicture和AVFrame主要表示解码过程中的使用缓存,通常帧缓存是YUV格式,输出格式有YUV也
+//有RGB格式,所以定义了4个data指针来表示分量
 typedef struct AVPicture
 {
     uint8_t *data[4];
@@ -50,11 +56,15 @@ typedef struct AVPicture
 
 typedef struct AVFrame
 {
-    uint8_t *data[4];
+    uint8_t *data[4];	//有多重意义,其一用NULL来判断是否被占用
     int linesize[4];
-    uint8_t *base[4];
+    uint8_t *base[4];	//有多重意义,其一用NULL来判断是否分配内存
 } AVFrame;
 
+/*
+程序运行时当前Codec使用的上下文,着重与所有Codec共有的属性(并且是在程序运行时才能确定其值),
+codec和priv_data关联其他结构的字段,便于在数据结构间跳转.
+*/
 typedef struct AVCodecContext
 {
     int bit_rate;
@@ -63,20 +73,20 @@ typedef struct AVCodecContext
     unsigned char *extradata; // Codec的私有数据，对Audio是WAVEFORMATEX结构扩展字节。
     int extradata_size; // 对Video是BITMAPINFOHEADER后的扩展字节
 
-    int width, height;
+    int width, height;	//video only
 
-    enum PixelFormat pix_fmt;
+    enum PixelFormat pix_fmt;	//输出像素格式/视频图像格式
 
     int sample_rate; // samples per sec  // audio only
     int channels;
     int bits_per_sample;
     int block_align;
 
-    struct AVCodec *codec;
-    void *priv_data;
+    struct AVCodec *codec;		//指向Codec的指针
+    void *priv_data;			//具体解码器属性,在本例中指向MsrleContext或TSContext
 
-    enum CodecType codec_type; // see CODEC_TYPE_xxx
-    enum CodecID codec_id; // see CODEC_ID_xxx
+    enum CodecType codec_type;	// see CODEC_TYPE_xxx
+    enum CodecID codec_id;		// see CODEC_ID_xxx
 
     int(*get_buffer)(struct AVCodecContext *c, AVFrame *pic);
     void(*release_buffer)(struct AVCodecContext *c, AVFrame *pic);
@@ -88,24 +98,33 @@ typedef struct AVCodecContext
     struct AVPaletteControl *palctrl;
 }AVCodecContext;
 
+/*
+类似COM接口的数据结构,表示音视频编解码器,着重与功能函数,一种媒体类型对应一个AVCodec结构,
+在程序运行时有多个实例串联成链表便于查找
+*/
 typedef struct AVCodec
 {
-    const char *name;
-    enum CodecType type;
-    enum CodecID id;
-    int priv_data_size;
+    const char *name;		//便于阅读的友好字符串,表征编解码器名称,比如"msrle","truespeech"
+    enum CodecType type;	//编解码器类型,有效取值为CODEC_TYPE_VIDEO或CODEC_TYPE_AUDIO
+    enum CodecID id;		//编解码器id值
+    int priv_data_size;		//具体编解码属性结构的大小,取代很多的if-else语句
     int(*init)(AVCodecContext*);
     int(*encode)(AVCodecContext *, uint8_t *buf, int buf_size, void *data);
     int(*close)(AVCodecContext*);
     int(*decode)(AVCodecContext *, void *outdata, int *outdata_size, uint8_t *buf, int buf_size);
     int capabilities;
 
-    struct AVCodec *next;
+    struct AVCodec *next;	//把所有的编解码器串联成链表便于查找
 }AVCodec;
 
+/*
+调色板大小和大小宏定义,每个调色板四字节(RGB,α).有很多的视频图像颜色种类比较少,用索引
+间接表示每个像素的颜色值,就可以用调色板和索引值实现简单的大约的4:1压缩比
+*/
 #define AVPALETTE_SIZE 1024
 #define AVPALETTE_COUNT 256
 
+//调色板数据结构定义,保存调色板数据
 typedef struct AVPaletteControl
 {
     // demuxer sets this to 1 to indicate the palette has changed; decoder resets to 0
@@ -119,6 +138,7 @@ typedef struct AVPaletteControl
 
 } AVPaletteControl;
 
+//编解码库使用的函数声明
 int avpicture_alloc(AVPicture *picture, int pix_fmt, int width, int height);
 
 void avpicture_free(AVPicture *picture);

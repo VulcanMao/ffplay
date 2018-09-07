@@ -1,3 +1,4 @@
+//编解码库使用的帮助和工具函数
 #include <assert.h>
 #include "avcodec.h"
 #include "dsputil.h"
@@ -9,6 +10,7 @@
 
 #define FFMAX(a,b) ((a) > (b) ? (a) : (b))
 
+//内存动态分配函数,做一下简单参数校验后调用系统函数
 void *av_malloc(unsigned int size)
 {
     void *ptr;
@@ -20,6 +22,7 @@ void *av_malloc(unsigned int size)
     return ptr;
 }
 
+//内存动态重分配函数,做一下简单参数校验后调用系统函数
 void *av_realloc(void *ptr, unsigned int size)
 {
     if (size > INT_MAX)
@@ -28,12 +31,14 @@ void *av_realloc(void *ptr, unsigned int size)
     return realloc(ptr, size);
 }
 
+//内存动态释放函数,做一下简单参数校验后调用系统函数
 void av_free(void *ptr)
 {
     if (ptr)
         free(ptr);
 }
 
+//内存动态分配函数,服用av_malloc()函数,再把分配的内存清0
 void *av_mallocz(unsigned int size)
 {
     void *ptr;
@@ -46,6 +51,7 @@ void *av_mallocz(unsigned int size)
     return ptr;
 }
 
+//快速内存动态分配函数,预分配一些内存来避免多次调用系统函数达到快速的目的
 void *av_fast_realloc(void *ptr, unsigned int *size, unsigned int min_size)
 {
     if (min_size <  *size)
@@ -56,6 +62,7 @@ void *av_fast_realloc(void *ptr, unsigned int *size, unsigned int min_size)
     return av_realloc(ptr,  *size);
 }
 
+//动态内存释放函数,注意传入的变量的类型
 void av_freep(void *arg)
 {
     void **ptr = (void **)arg;
@@ -65,6 +72,7 @@ void av_freep(void *arg)
 
 AVCodec *first_avcodec = NULL;
 
+//把编解码器串联成一个链表,便于查找
 void register_avcodec(AVCodec *format)
 {
     AVCodec **p;
@@ -75,6 +83,7 @@ void register_avcodec(AVCodec *format)
     format->next = NULL;
 }
 
+//编解码库内部使用的缓冲区,因为视频图像有RGB或YUV分量格式,所以每个数组有四个分量
 typedef struct InternalBuffer
 {
     uint8_t *base[4];
@@ -86,8 +95,10 @@ typedef struct InternalBuffer
 
 #define ALIGN(x, a) (((x)+(a)-1)&~((a)-1))
 
+//计算各种图像格式要求的图像长宽的字节对齐数,是1个还是2个,4个还是8个,或16个字节对齐
 void avcodec_align_dimensions(AVCodecContext *s, int *width, int *height)
 {
+	//默认长宽是1个字节对齐
     int w_align = 1;
     int h_align = 1;
 
@@ -126,6 +137,7 @@ void avcodec_align_dimensions(AVCodecContext *s, int *width, int *height)
     *height = ALIGN(*height, h_align);
 }
 
+//校验视频
 int avcodec_check_dimensions(void *av_log_ctx, unsigned int w, unsigned int h)
 {
     if ((int)w > 0 && (int)h > 0 && (w + 128)*(uint64_t)(h + 128) < INT_MAX / 4)
