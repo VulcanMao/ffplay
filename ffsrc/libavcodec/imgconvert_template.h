@@ -1,9 +1,13 @@
+/*
+定义并实现图像颜色空间转换使用的函数和宏,此文件请自己仔细分析
+*/
 #ifndef RGB_OUT
 #define RGB_OUT(d, r, g, b) RGBA_OUT(d, r, g, b, 0xff)
 #endif
 
 #pragma warning (disable:4305 4244)
 
+//此文件请给读者自行分析,都是些颜色空间转换函数
 static void glue(yuv420p_to_, RGB_NAME)(AVPicture *dst, const AVPicture *src, int width, int height)
 {
     const uint8_t *y1_ptr,  *y2_ptr,  *cb_ptr,  *cr_ptr;

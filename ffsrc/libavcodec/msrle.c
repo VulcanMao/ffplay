@@ -1,3 +1,6 @@
+/*
+此文件实现微软行程长度压缩算法解码器,此文件请各位参考压缩算法自己仔细分析
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

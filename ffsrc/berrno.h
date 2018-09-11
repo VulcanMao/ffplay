@@ -1,3 +1,6 @@
+/*
+简单的错误码定义,用于描述错误类型,此文件来源于\VC98\Include\ERRNO.H,做了删减
+*/
 #ifndef BERRNO_H
 #define BERRNO_H
 

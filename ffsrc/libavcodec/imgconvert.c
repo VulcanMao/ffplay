@@ -1,3 +1,6 @@
+/*
+定义并实现图像颜色空间转换使用的函数和宏,此文件大部分请各位自己仔细分析
+*/
 #include "avcodec.h"
 #include "dsputil.h"
 
@@ -13,6 +16,7 @@
 #define FF_PIXEL_PACKED   1 // only one components containing all the channels
 #define FF_PIXEL_PALETTE  2 // one components containing indexes for a palette
 
+//定义视频图像格式信息类型
 typedef struct PixFmtInfo
 {
     const char *name;
@@ -25,6 +29,7 @@ typedef struct PixFmtInfo
     uint8_t depth; // bit depth of the color components
 } PixFmtInfo;
 
+//定义支持的视频图像格式信息
 // this table gives more information about formats
 static PixFmtInfo pix_fmt_info[PIX_FMT_NB] =
 {
@@ -52,18 +57,21 @@ static PixFmtInfo pix_fmt_info[PIX_FMT_NB] =
     { "uyvy411",  1, FF_COLOR_YUV, FF_PIXEL_PACKED, 0, 2, 0, 8},
 };
 
+//读取视频图像格式信息中色度相对亮度采样比例(用移位的位数表示)
 void avcodec_get_chroma_sub_sample(int pix_fmt, int *h_shift, int *v_shift)
 {
     *h_shift = pix_fmt_info[pix_fmt].x_chroma_shift;
     *v_shift = pix_fmt_info[pix_fmt].y_chroma_shift;
 }
 
+//填充各种视频图像格式对应的AVPicture结构字段,返回图像大小
 // Picture field are filled with 'ptr' addresses. Also return size
 int avpicture_fill(AVPicture *picture, uint8_t *ptr, int pix_fmt, int width, int height)
 {
     int size, w2, h2, size2;
     PixFmtInfo *pinfo;
 	
+	//图像像素大小规整,比如YUV420P宽度和高度必须是2的整数倍,如果不符合,程序自动填充补足
     if (avcodec_check_dimensions(NULL, width, height))
         goto fail;
 	
@@ -71,6 +79,7 @@ int avpicture_fill(AVPicture *picture, uint8_t *ptr, int pix_fmt, int width, int
     size = width * height;
     switch (pix_fmt)
     {
+		//按照图像格式,分别计算AVPicture结构字段的值
     case PIX_FMT_YUV420P:
 	case PIX_FMT_YUV422P:
 	case PIX_FMT_YUV444P:
@@ -153,23 +162,28 @@ fail:
     }
 }
 
+//传入像素格式,图像长宽,计算图像大小,程序简单的复用avpicture_fill()函数的返回值
 int avpicture_get_size(int pix_fmt, int width, int height)
 {
     AVPicture dummy_pict;
     return avpicture_fill(&dummy_pict, NULL, pix_fmt, width, height);
 }
 
+//初始化AVPicture结构,输入像素格式和长宽,计算图像大小,分配图像缓存,填充AVPicture结构
 int avpicture_alloc(AVPicture *picture, int pix_fmt, int width, int height)
 {
     unsigned int size;
     void *ptr;
 	
+	//调用函数,计算图像大小
     size = avpicture_get_size(pix_fmt, width, height);
     if (size < 0)
         goto fail;
+	//调用函数分配图像缓存
     ptr = av_malloc(size);
     if (!ptr)
         goto fail;
+	//填充AVPicture结构
     avpicture_fill(picture, ptr, pix_fmt, width, height);
     return 0;
 fail: 
@@ -177,11 +191,13 @@ fail:
 	return  - 1;
 }
 
+//释放AVPicture分配的内存,因为内存首地址在picture->data[0]中,所以可以简单的释放
 void avpicture_free(AVPicture *picture)
 {
     av_free(picture->data[0]);
 }
 
+//计算各种图像格式平均每个像素占用的bit位数
 static int avg_bits_per_pixel(int pix_fmt)
 {
     int bits;
@@ -229,6 +245,7 @@ static int avg_bits_per_pixel(int pix_fmt)
 
 ////////////////////////////
 
+//图像数据平面拷贝,由于宽度可能有差别,只能一行一行的拷贝
 void ff_img_copy_plane(uint8_t *dst, int dst_wrap, const uint8_t *src, int src_wrap, int width, int height)
 {
     if ((!dst) || (!src))
@@ -242,6 +259,7 @@ void ff_img_copy_plane(uint8_t *dst, int dst_wrap, const uint8_t *src, int src_w
     }
 }
 
+//各种图像格式的图像数据拷贝
 void img_copy(AVPicture *dst, const AVPicture *src, int pix_fmt, int width, int height)
 {
     int bwidth, bits, i;
@@ -292,6 +310,7 @@ void img_copy(AVPicture *dst, const AVPicture *src, int pix_fmt, int width, int 
     }
 }
 
+//本文件后面部分请各位自行仔细分析
 static void yuv422_to_yuv420p(AVPicture *dst, const AVPicture *src, int width, int height)
 {
     const uint8_t *p,  *p1;

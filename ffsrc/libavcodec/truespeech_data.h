@@ -1,3 +1,6 @@
+/*
+此文件定义true speed 音频解码器使用的常数,此文件请各位参考TrueSpeed压缩算法自己仔细分析
+*/
 #ifndef __TRUESPEECH_DATA__
 #define __TRUESPEECH_DATA__
 

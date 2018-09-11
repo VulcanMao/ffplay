@@ -1,3 +1,6 @@
+/*
+此文件实现true speed音频解码器,此文件请各位参考压缩算法自己仔细分析
+*/
 #include "avcodec.h"
 
 #include "truespeech_data.h"
